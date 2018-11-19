@@ -5,7 +5,10 @@
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater,CommandHandler,MessageHandler,CallbackQueryHandler,Filters
-import urllib2, json, time, schedule
+from apscheduler.schedulers.background import BackgroundScheduler
+import urllib2, json, time
+
+sched = BackgroundScheduler()
 
 updater = Updater(token='XXX')
 dispatcher = updater.dispatcher
@@ -55,6 +58,7 @@ def Automatico(bot, update):
 automatico_handler = CommandHandler('automatico', Automatico)
 dispatcher.add_handler(automatico_handler)
 
+@sched.scheduled_job('cron', day_of_week='mon,wed,fri', hour=17)
 def Job():
   if(comicAutomatico):
     img = Xkcdobtainer()
@@ -96,14 +100,6 @@ root_handler = MessageHandler(Filters.text, root)
 dispatcher.add_handler (root_handler)
 
 
-schedule.every().monday.at("17:00").do(Job)
-schedule.every().wednesday.at("17:00").do(Job)
-schedule.every().friday.at("17:00").do(Job)
-
-while True:
-    schedule.run_pending()
-    updater.start_polling()
-    updater.idle()
-
-
+sched.start()
+updater.start_polling()
 
