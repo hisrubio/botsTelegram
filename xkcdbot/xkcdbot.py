@@ -6,7 +6,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater,CommandHandler,MessageHandler,CallbackQueryHandler,Filters
 from apscheduler.schedulers.background import BackgroundScheduler
-import urllib2, json, time
+import urllib2, json, time, psycopg2, database
 
 sched = BackgroundScheduler()
 
@@ -14,9 +14,29 @@ updater = Updater(token='XXX')
 dispatcher = updater.dispatcher
 
 esperoTexto=False
-comicAutomatico=False
-chatIdComicAutomatico=None
-botComicAutomatico=None
+
+def guardarChat (chatId):
+  conn = database.conect()
+  database.statement(conn, "create table if not exists chats(chatId varchar);")
+  database.statement(conn, "insert into chats (chatId) values('" + str(chatId) + "');")
+  database.close(conn)
+
+def borrarChat (chatId):
+  conn = database.conect()
+  database.statement(conn, "delete from chats where chatId='"+str(chatId)+"';")
+  database.close(conn)
+
+def truncateChats ():
+  conn = database.conect()
+  database.statement(conn, "truncate table chats")
+  database.close(conn)
+
+def obtenerChats():
+  conn = database.conect()
+  cur = database.statement(conn, "SELECT * from chats")
+  rows = cur.fetchall()
+  database.close(conn)
+  return rows
 
 def Xkcdobtainer (comic=""):
   f = urllib2.urlopen('http://xkcd.com/'+comic+'/info.0.json')
@@ -27,7 +47,7 @@ def Xkcdobtainer (comic=""):
   return img
 
 def start(bot, update):
-  update.message.reply_text("Hola! \n /help si quieres ayuda")
+  update.message.reply_text("ay hola \ndele /help si quieres ayuda")
 start_handler = CommandHandler('start', start)
 dispatcher.add_handler(start_handler)
 
@@ -35,6 +55,12 @@ def help(bot, update):
   update.message.reply_text("/lastxkcd Para sacar el último comic \n/xkcd Para elegir comic \n/automatico Para activar o desactivar que llegue automaticamente el ultimo comic cuando se publique")
 help_handler = CommandHandler('help', help)
 dispatcher.add_handler(help_handler)
+
+def borraLosChats(bot, update):
+  truncateChats()
+  update.message.reply_text("Done")
+BorraLosChats_handler = CommandHandler('admin', borraLosChats)
+dispatcher.add_handler(BorraLosChats_handler)
 
 def lastXkcd (bot, update):
   img = Xkcdobtainer()
@@ -60,33 +86,25 @@ dispatcher.add_handler(automatico_handler)
 
 @sched.scheduled_job('cron', day_of_week='mon,wed,fri', hour=17)
 def Job():
-  if(comicAutomatico):
+  rows = obtenerChats()
+  if (rows != None or rows != 0):
     img = Xkcdobtainer()
-    botComicAutomatico.sendPhoto(chatIdComicAutomatico,photo=img)
+    for row in rows:
+      chatId=row[0]
+      updater.bot.sendPhoto(chatId,photo=img)
 
 
 
 def InlineBttn(bot, update):
     query=update.callback_query.data
     chatqueryid=update.callback_query.message.chat.id
-    
     if query == "1":
+        guardarChat(chatqueryid)
         bot.send_message(chatqueryid,text='Vale, activado')
-        global comicAutomatico
-        comicAutomatico=True
-        global chatIdComicAutomatico
-        chatIdComicAutomatico=chatqueryid
-        global botComicAutomatico
-        botComicAutomatico=bot
     else:
       if query == "2":
+        borrarChat(chatqueryid)
         bot.send_message(chatqueryid,text='Desactivado')
-        global comicAutomatico
-        comicAutomatico=False
-        global chatIdComicAutomatico
-        chatIdComicAutomatico=None
-        global botComicAutomatico
-        botComicAutomatico=None
 inlineBttn_handler=CallbackQueryHandler(callback=InlineBttn)
 updater.dispatcher.add_handler(inlineBttn_handler)
 
