@@ -114,7 +114,7 @@ def Job():
   if rows != []:
     lastImg = obtenerLastImg()
     img = Xkcdobtainer()
-    if str(lastImg[0][1]) != str(img[1]):
+    if lastImg == [] or (str(lastImg[0][1]) != str(img[1])):
       for row in rows:
         chatId=row[0]
         updater.bot.sendPhoto(chatId,photo=img[0])
