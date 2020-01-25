@@ -21,6 +21,13 @@ def guardarChat (chatId):
   database.statement(conn, "insert into chats (chatId) values('" + str(chatId) + "');")
   database.close(conn)
 
+def guardarLastImg (img):
+  conn = database.conect()
+  database.statement(conn, "create table if not exists parametros(param varchar, value varchar);")
+  database.statement(conn, "CREATE unique INDEX if not exists param ON parametros(param);")
+  database.statement(conn, "insert into parametros (param,value) values('lastImg','') on conflict (param) do update set value='" + str(img) + "';")
+  database.close(conn)
+  
 def borrarChat (chatId):
   conn = database.conect()
   database.statement(conn, "delete from chats where chatId='"+str(chatId)+"';")
@@ -38,13 +45,30 @@ def obtenerChats():
   database.close(conn)
   return rows
 
+def obtenerChat(chatId):
+  conn = database.conect()
+  cur = database.statement(conn, "SELECT * from chats where chatId='"+str(chatId)+"';")
+  rows = cur.fetchall()
+  database.close(conn)
+  return rows
+
+def obtenerLastImg():
+  conn = database.conect()
+  cur = database.statement(conn, "SELECT * from parametros where param='lastImg';")
+  rows = cur.fetchall()
+  database.close(conn)
+  return rows
+
 def Xkcdobtainer (comic=""):
   f = urllib2.urlopen('http://xkcd.com/'+comic+'/info.0.json')
   json_string = f.read()
   parsed_json = json.loads(json_string)
   img = parsed_json['img']
+  num = parsed_json['num']
+  if comic == "":
+    guardarLastImg(num)
   f.close()
-  return img
+  return img, num
 
 def start(bot, update):
   update.message.reply_text("ay hola \ndele /help si quieres ayuda")
@@ -64,7 +88,7 @@ dispatcher.add_handler(BorraLosChats_handler)
 
 def lastXkcd (bot, update):
   img = Xkcdobtainer()
-  update.message.reply_photo(img)
+  update.message.reply_photo(img[0])
 lastXkcd_handler = CommandHandler('lastxkcd', lastXkcd)  
 dispatcher.add_handler (lastXkcd_handler)
 
@@ -87,11 +111,18 @@ dispatcher.add_handler(automatico_handler)
 @sched.scheduled_job('cron', day_of_week='mon,wed,fri', hour=17)
 def Job():
   rows = obtenerChats()
-  if (rows != None or rows != 0):
+  if rows != []:
+    lastImg = obtenerLastImg()
     img = Xkcdobtainer()
-    for row in rows:
-      chatId=row[0]
-      updater.bot.sendPhoto(chatId,photo=img)
+    if str(lastImg[0][1]) != str(img[1]):
+      for row in rows:
+        chatId=row[0]
+        updater.bot.sendPhoto(chatId,photo=img[0])
+        if(sched.get_job('repetir')):
+          sched.remove_job('repetir')
+    else:
+      sched.add_job(Job, 'interval', minutes=30, id='repetir', replace_existing=True)
+  sched.print_jobs()
 
 
 
@@ -99,8 +130,12 @@ def InlineBttn(bot, update):
     query=update.callback_query.data
     chatqueryid=update.callback_query.message.chat.id
     if query == "1":
-        guardarChat(chatqueryid)
-        bot.send_message(chatqueryid,text='Vale, activado')
+        rows = obtenerChat(chatqueryid)
+        if rows == []:
+          guardarChat(chatqueryid)
+          bot.send_message(chatqueryid,text='Vale, activado')
+        else:
+          bot.send_message(chatqueryid,text='Ya estaba activado')  
     else:
       if query == "2":
         borrarChat(chatqueryid)
@@ -111,7 +146,7 @@ updater.dispatcher.add_handler(inlineBttn_handler)
 def root (bot, update):
   if(esperoTexto):
     img=Xkcdobtainer(update.message.text)
-    update.message.reply_photo(img)
+    update.message.reply_photo(img[0])
     global esperoTexto
     esperoTexto=False
 root_handler = MessageHandler(Filters.text, root)  
